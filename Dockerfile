@@ -1,21 +1,52 @@
 # syntax=docker/dockerfile:experimental
-FROM ubuntu:bionic
+FROM ubuntu:jammy
 
 # Install system packages
 RUN set -ex && \
-    apt-get update && \
+    export DEBIAN_FRONTEND=noninteractive && \
+    apt-get update -yq && \
+    apt-get upgrade -yq && \
     apt-get install -yq --no-install-recommends \
+        build-essential \
         ca-certificates \
+        curl \
         python2.7 \
+        python2.7-dev \
         libpython2.7 \
+        sqlite \
+        libsqlite3-dev \
+        libssl-dev \
         net-tools \
-        python-setuptools \
-        python-m2crypto \
-        python-apsw \
-        python-lxml \
-        wget && \
-    apt-get clean && \
+        swig \
+        wget
+
+# Workaround to get libssl1.1 in Ubuntu 22 - https://askubuntu.com/questions/1403619/mongodb-install-fails-on-ubuntu-22-04-depends-on-libssl1-1-but-it-is-not-insta
+RUN wget --no-verbose http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2_amd64.deb && \
+    dpkg -i libssl1.1_1.1.1f-1ubuntu2_amd64.deb && \
+    rm libssl1.1_1.1.1f-1ubuntu2_amd64.deb
+
+# APT cleanup
+RUN apt-get autoremove -yq && \
+    apt-get clean -yq && \
     rm -rf /var/lib/apt/lists/* /var/cache/*
+
+# Manual install of pip as python2-pip no longer exists in Ubuntu 22
+RUN curl -s https://bootstrap.pypa.io/pip/2.7/get-pip.py | /usr/bin/python2.7
+
+# Manual install of APSW as python2-apsw no longer exists in Ubuntu 22
+# Using version of APSW which still supports Python 2 (at least this is my assumption, this step is taken from AUR acestream-engine package)
+# Taking from GitHub archive and then building as this version doesn't seem to be on PyPi
+RUN wget --no-verbose https://github.com/rogerbinns/apsw/archive/3.33.0-r1.tar.gz && \
+    tar -xzvf 3.33.0-r1.tar.gz && \
+    rm 3.33.0-r1.tar.gz && \
+    cd apsw-3.33.0-r1 && \
+    /usr/bin/python2.7 setup.py build && \
+    /usr/bin/python2.7 setup.py install && \
+    cd .. && \
+    rm -r apsw-3.33.0-r1
+
+# Install other "python2-*" required packages no longer available in Ubuntu (setuptools seems to be already included in the get-pip.py install)
+RUN /usr/bin/python2.7 -m pip install m2crypto lxml
 
 # Install Ace Stream
 # https://wiki.acestream.media/Download#Linux
